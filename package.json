@@ -1,7 +1,7 @@
 {
   "name": "autocomp",
   "productName": "AutoComp",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Next Generation Text Capture & Learning Tool",
   "main": "main.js",
   "author": "Mizuno Akira Hitoshi",

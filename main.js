@@ -167,43 +167,57 @@ ipcMain.on('cancel-selection', () => {
 });
 
 function startWebSocketServer() {
-    let port = 18080; // 8080 を避け、より競合しにくいポート番号から開始
-    const maxTries = 5;
+    let port = 18080;
+    const maxTries = 3;
     let tryCount = 0;
 
     const tryStart = (p) => {
-        try {
-            const server = new WebSocket.Server({ port: p });
-            wsServer = server;
-            console.log(`WebSocket Server started on port ${p}`);
+        const server = new WebSocket.Server({ port: p }, () => {
+            console.log(`WebSocket Server listening on port ${p}`);
+        });
 
-            wsServer.on('connection', (ws) => {
-                ws.on('message', (message) => {
-                    try {
-                        const data = JSON.parse(message);
-                        if (data.type === 'LEARN_WORDS' && Array.isArray(data.words)) {
-                            updateLearnedWords(data.words);
-                        }
-                    } catch (e) { }
-                });
+        wsServer = server;
+
+        wsServer.on('connection', (ws) => {
+            ws.on('message', (message) => {
+                try {
+                    const data = JSON.parse(message);
+                    if (data.type === 'LEARN_WORDS' && Array.isArray(data.words)) {
+                        updateLearnedWords(data.words);
+                    }
+                } catch (e) { }
             });
+        });
 
-            wsServer.on('error', (err) => {
-                if (err.code === 'EADDRINUSE' && tryCount < maxTries) {
+        // ポート衝突時の自動リトライ
+        wsServer.on('error', (err) => {
+            if (err.code === 'EADDRINUSE') {
+                if (tryCount < maxTries) {
                     tryCount++;
-                    console.warn(`Port ${p} in use, trying ${p + 1}...`);
+                    console.warn(`Port ${p} busy, trying ${p + 1}...`);
                     tryStart(p + 1);
                 } else {
-                    console.error("WebSocket Server error:", err);
+                    // 最終手段：ポート0（OSにお任せ）で起動してクラッシュを防ぐ
+                    console.warn(`All preferred ports busy, using ephemeral port...`);
+                    tryStart(0);
                 }
-            });
-        } catch (e) {
-            console.error("Failed to start WebSocket server:", e);
-        }
+            } else {
+                console.error("WS Server Error:", err);
+            }
+        });
     };
 
-    tryStart(port);
+    try {
+        tryStart(port);
+    } catch (e) {
+        console.error("Initial WS start failed:", e);
+    }
 }
+
+// 予期せぬエラーでアプリが落ちるのを防ぐ最終防衛線
+process.on('uncaughtException', (error) => {
+    console.error('Uncaught Exception:', error);
+});
 
 function updateLearnedWords(newItems) {
     let updated = false;
