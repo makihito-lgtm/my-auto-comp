@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap');
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+            background-color: transparent;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: flex-end;
+            padding-bottom: 40px;
+        }
+
+        #concentration-box {
+            width: 90%;
+            max-width: 800px;
+            height: 200px;
+            background: rgba(18, 18, 20, 0.5);
+            backdrop-filter: blur(30px) saturate(180%);
+            -webkit-backdrop-filter: blur(30px) saturate(180%);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 20px;
+            padding: 24px;
+            color: rgba(255, 255, 255, 0.95);
+            font-size: 16px;
+            line-height: 1.6;
+            overflow-y: auto;
+            position: relative;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+        }
+
+        #concentration-box::before {
+            content: 'Concentration Mode Recording...';
+            position: absolute;
+            top: 10px;
+            right: 20px;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: #ff4081;
+            font-weight: 700;
+        }
+
+        .text-line {
+            margin-bottom: 6px;
+            opacity: 0;
+            animation: fadeIn 0.4s ease-out forwards;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(8px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        ::-webkit-scrollbar {
+            width: 5px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.25);
+            border-radius: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="concentration-box"></div>
+
+    <script>
+        const { ipcRenderer } = require('electron');
+        const box = document.getElementById('concentration-box');
+
+        let cumulativeScrollY = 0;
+        let lastBatch = [];
+        let capturedIntervals = []; // [{start, end}] ページ絶対座標での「既読区間」
+        let collectedLines = [];
+
+        function normalize(str) {
+            return str.replace(/[\s　.,，。、・()（）「」『』[\]]/g, '').toLowerCase();
+        }
+
+        ipcRenderer.on('add-text', (event, newBatch) => {
+            if (!newBatch || newBatch.length === 0) return;
+
+            // 1. スクロール移動量の精密推定 (Anchor System)
+            let deltas = [];
+            for (const newLine of newBatch) {
+                const normNew = normalize(newLine.text);
+                if (normNew.length < 4) continue; // ノイズ防止
+
+                // 過去のバッチから一致を探す（直近だけでなく全体から探すとさらに堅牢だが、一旦直近で）
+                const match = lastBatch.find(old => normalize(old.text) === normNew);
+                if (match) {
+                    deltas.push(newLine.y - match.y);
+                }
+            }
+
+            if (deltas.length > 0) {
+                // 外れ値を除去するためにソートして中央値を採用
+                deltas.sort((a, b) => a - b);
+                const medianDelta = deltas[Math.floor(deltas.length / 2)];
+                cumulativeScrollY -= medianDelta;
+            }
+            lastBatch = newBatch;
+
+            const linesToAdd = [];
+            newBatch.forEach(line => {
+                const norm = normalize(line.text);
+                if (norm.length < 2) return;
+
+                // 仮想ページ上の絶対位置を算出
+                const absY = line.y + cumulativeScrollY;
+                const margin = line.height * 0.45; // 判定のあそび（少し広めに）
+
+                // 「システム的なマーキング判定」
+                // 物理的にこの場所を既に読み終えているかチェック
+                const isAlreadyMarked = capturedIntervals.some(interval =>
+                    absY > (interval.start - margin) && absY < (interval.end + margin)
+                );
+
+                if (!isAlreadyMarked) {
+                    linesToAdd.push(line.text);
+                    capturedIntervals.push({
+                        start: absY,
+                        end: absY + line.height
+                    });
+
+                    // インターバルの統合（効率化）
+                    capturedIntervals.sort((a, b) => a.start - b.start);
+                    for (let i = 0; i < capturedIntervals.length - 1; i++) {
+                        if (capturedIntervals[i].end >= capturedIntervals[i + 1].start) {
+                            capturedIntervals[i].end = Math.max(capturedIntervals[i].end, capturedIntervals[i + 1].end);
+                            capturedIntervals.splice(i + 1, 1);
+                            i--;
+                        }
+                    }
+                }
+            });
+
+            // 2. UIへの反映
+            if (linesToAdd.length > 0) {
+                linesToAdd.forEach(text => {
+                    collectedLines.push(text);
+                    const lineDiv = document.createElement('div');
+                    lineDiv.className = 'text-line';
+                    lineDiv.textContent = text;
+                    box.appendChild(lineDiv);
+                });
+                box.scrollTop = box.scrollHeight;
+                ipcRenderer.send('update-concentration-buffer', collectedLines.join('\n'));
+            }
+        });
+
+        ipcRenderer.on('clear-text', () => {
+            box.innerHTML = '';
+            collectedLines = [];
+            lastBatch = [];
+            capturedIntervals = [];
+            cumulativeScrollY = 0;
+        });
+    </script>
+</body>
+
+</html>

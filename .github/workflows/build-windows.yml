@@ -1,0 +1,45 @@
+name: Build Windows Installer
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20
+        cache: 'npm'
+        cache-dependency-path: autocomp-mac/package.json
+
+    - name: Install dependencies
+      working-directory: autocomp-mac
+      run: npm install
+
+    - name: Setup MSBuild (csc)
+      uses: microsoft/setup-msbuild@v2
+
+    - name: Compile Native Windows OCR (ocr.exe)
+      working-directory: autocomp-mac
+      run: |
+        csc /target:exe /out:ocr.exe ocr.cs /reference:System.Drawing.dll /reference:System.Runtime.WindowsRuntime.dll /reference:Windows.Media.dll
+
+    - name: Build Electron Installer (.exe)
+      working-directory: autocomp-mac
+      run: npm run build:win
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Upload Installer Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: AutoComp-Windows-Installer
+        path: autocomp-mac/dist/*.exe

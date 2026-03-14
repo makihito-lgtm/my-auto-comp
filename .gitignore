@@ -1,0 +1,8 @@
+node_modules/
+dist/
+build/
+*.log
+.DS_Store
+ocr
+ocr.exe
+screen.png

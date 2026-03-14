@@ -1,0 +1,48 @@
+{
+  "name": "autocomp",
+  "productName": "AutoComp",
+  "version": "1.0.0",
+  "description": "Next Generation Text Capture & Learning Tool",
+  "main": "main.js",
+  "author": "Mizuno Akira Hitoshi",
+  "scripts": {
+    "start": "electron .",
+    "build:win": "electron-builder --win --x64",
+    "build:mac": "electron-builder --mac"
+  },
+  "dependencies": {
+    "ws": "^8.16.0"
+  },
+  "devDependencies": {
+    "electron": "^29.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.autocomp.app",
+    "productName": "AutoComp",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "**/*",
+      "dist/**/*"
+    ],
+    "extraResources": [
+      "ocr",
+      "ocr.exe"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "build/icon.icns"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    }
+  }
+}
