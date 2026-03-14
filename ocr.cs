@@ -14,9 +14,10 @@ namespace AutoCompOCR
     class Program
     {
         [STAThread]
-        static void Main(string[] args)
+        static async Task Main(string[] args)
         {
-            Task.Run(async () => {
+            try
+            {
                 bool isConcentrationMode = args.Contains("--concentration");
                 Rectangle? cropRect = null;
 
@@ -34,7 +35,12 @@ namespace AutoCompOCR
                 }
 
                 await PerformOCR(isConcentrationMode, cropRect);
-            }).Wait();
+            }
+            catch (Exception ex)
+            {
+                // エラー時は空の結果を返す
+                Console.WriteLine("{\"results\":[]}");
+            }
         }
 
         static async Task PerformOCR(bool isConcentrationMode, Rectangle? cropRect)
@@ -71,11 +77,14 @@ namespace AutoCompOCR
                 var engine = OcrEngine.TryCreateFromLanguage(new Windows.Globalization.Language("ja-JP")) 
                              ?? OcrEngine.TryCreateFromLanguage(new Windows.Globalization.Language("en-US"));
                 
-                if (engine == null) return;
+                if (engine == null)
+                {
+                    Console.WriteLine("{\"results\":[]}");
+                    return;
+                }
 
                 var result = await engine.RecognizeAsync(softwareBitmap);
                 
-                // 手動でのJSON構築 (外部DLL依存を避けるため)
                 StringBuilder json = new StringBuilder();
                 json.Append("{\"results\":[");
 
@@ -86,17 +95,9 @@ namespace AutoCompOCR
                         .Replace("\\", "\\\\").Replace("\"", "\\\"");
                     
                     if (text.Length < 2) continue;
-
-                    // 座標情報の取得
-                    // Windows Media OCR の Line は BoundingRect を持たないため、
-                    // 最初のワードの左上と最後のワードの右下から近似計算するケースが多いが、
-                    // ここでは簡易的に Line 全体の情報は取れないため、最初の Word の位置を使用するか
-                    // 座標なしで判定する場合は text のみ。
-                    // ただし重複排除には座標が重要なので、Wordを合成して計算する
                     
                     if (!first) json.Append(",");
                     
-                    // 簡易的に最初のWordの座標を代表値として使用（Windows Media OCRの制限）
                     var firstWord = line.Words[0];
                     var rect = firstWord.BoundingRect;
 

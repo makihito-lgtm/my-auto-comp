@@ -23,17 +23,15 @@ jobs:
     - name: Install dependencies
       run: npm install
 
-    - name: Setup MSBuild (csc)
-      uses: microsoft/setup-msbuild@v2
-
-    - name: Install WinRT SDK Contracts via NuGet
-      run: |
-        nuget install Microsoft.Windows.SDK.Contracts -Version 10.0.19041.1 -OutputDirectory nuget
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 6.0.x
 
     - name: Compile Native Windows OCR (ocr.exe)
       run: |
-        $contractPath = Get-ChildItem -Path "nuget\Microsoft.Windows.SDK.Contracts*\lib\netstandard2.0\Microsoft.Windows.SDK.Contracts.dll" | Select-Object -First 1 -ExpandProperty FullName
-        csc /target:exe /out:ocr.exe ocr.cs /reference:System.Drawing.dll /reference:System.Runtime.WindowsRuntime.dll /reference:"$contractPath"
+        dotnet publish AutoCompOCR.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o .
+        move-item AutoCompOCR.exe ocr.exe
       shell: powershell
 
     - name: Build Electron Installer (.exe)
