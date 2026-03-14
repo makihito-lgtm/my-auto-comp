@@ -167,17 +167,42 @@ ipcMain.on('cancel-selection', () => {
 });
 
 function startWebSocketServer() {
-    wsServer = new WebSocket.Server({ port: 8080 });
-    wsServer.on('connection', (ws) => {
-        ws.on('message', (message) => {
-            try {
-                const data = JSON.parse(message);
-                if (data.type === 'LEARN_WORDS' && Array.isArray(data.words)) {
-                    updateLearnedWords(data.words);
+    let port = 18080; // 8080 を避け、より競合しにくいポート番号から開始
+    const maxTries = 5;
+    let tryCount = 0;
+
+    const tryStart = (p) => {
+        try {
+            const server = new WebSocket.Server({ port: p });
+            wsServer = server;
+            console.log(`WebSocket Server started on port ${p}`);
+
+            wsServer.on('connection', (ws) => {
+                ws.on('message', (message) => {
+                    try {
+                        const data = JSON.parse(message);
+                        if (data.type === 'LEARN_WORDS' && Array.isArray(data.words)) {
+                            updateLearnedWords(data.words);
+                        }
+                    } catch (e) { }
+                });
+            });
+
+            wsServer.on('error', (err) => {
+                if (err.code === 'EADDRINUSE' && tryCount < maxTries) {
+                    tryCount++;
+                    console.warn(`Port ${p} in use, trying ${p + 1}...`);
+                    tryStart(p + 1);
+                } else {
+                    console.error("WebSocket Server error:", err);
                 }
-            } catch (e) { }
-        });
-    });
+            });
+        } catch (e) {
+            console.error("Failed to start WebSocket server:", e);
+        }
+    };
+
+    tryStart(port);
 }
 
 function updateLearnedWords(newItems) {
